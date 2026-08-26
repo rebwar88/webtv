@@ -1,36 +1,65 @@
+import 'package:http/http.dart' as http;
 import '../models/channel_model.dart';
 
 class ChannelService {
+  /// Iraq playlist from the community-maintained iptv-org project.
+  /// Includes Kurdish-language channels alongside national ones.
+  /// Source: https://github.com/iptv-org/iptv
+  static const String playlistUrl = 'https://iptv-org.github.io/iptv/countries/iq.m3u';
+
   static Future<List<Channel>> fetchChannels() async {
-    return [
-      Channel(
-        id: '1',
-        name: 'Big Buck Bunny (HLS Test 1080p)',
-        streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-        logo: '',
-        category: 'Test',
-      ),
-      Channel(
-        id: '2',
-        name: 'Akamai HLS Live Stream',
-        streamUrl: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
-        logo: '',
-        category: 'Test',
-      ),
-      Channel(
-        id: '3',
-        name: 'Al Jazeera English',
-        streamUrl: 'https://live-hls-web-aje.getaj.net/AJE/01.m3u8',
-        logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/f/f2/Al_Jazeera_English_logo.svg/300px-Al_Jazeera_English_logo.svg.png',
-        category: 'News',
-      ),
-      Channel(
-        id: '4',
-        name: 'Sintel Open Source Stream',
-        streamUrl: 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8',
-        logo: '',
-        category: 'Movie',
-      ),
-    ];
+    final response = await http.get(Uri.parse(playlistUrl));
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load playlist (${response.statusCode})');
+    }
+
+    return _parseM3U(response.body);
+  }
+
+  static List<Channel> _parseM3U(String content) {
+    final lines = content.split('\n').map((l) => l.trim()).toList();
+    final channels = <Channel>[];
+
+    String name = 'Unknown Channel';
+    String logo = '';
+    String category = 'General';
+    int idCounter = 0;
+
+    for (final line in lines) {
+      if (line.isEmpty) continue;
+
+      if (line.startsWith('#EXTINF')) {
+        logo = _extractAttribute(line, 'tvg-logo') ?? '';
+        category = _extractAttribute(line, 'group-title') ?? 'General';
+
+        final commaIndex = line.indexOf(',');
+        name = commaIndex != -1 && commaIndex + 1 < line.length
+            ? line.substring(commaIndex + 1).trim()
+            : 'Unknown Channel';
+      } else if (!line.startsWith('#')) {
+        idCounter++;
+        channels.add(
+          Channel(
+            id: idCounter.toString(),
+            name: name,
+            streamUrl: line,
+            logo: logo,
+            category: category,
+          ),
+        );
+        name = 'Unknown Channel';
+        logo = '';
+        category = 'General';
+      }
+    }
+
+    return channels;
+  }
+
+  static String? _extractAttribute(String line, String key) {
+    final regex = RegExp('$key="([^"]*)"');
+    final match = regex.firstMatch(line);
+    return match?.group(1);
   }
 }

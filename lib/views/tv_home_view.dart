@@ -20,6 +20,7 @@ class _TvHomeViewState extends State<TvHomeView> {
   Channel? currentChannel;
   bool showSidebar = true;
   bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -28,15 +29,29 @@ class _TvHomeViewState extends State<TvHomeView> {
   }
 
   Future<void> _loadChannels() async {
-    final list = await ChannelService.fetchChannels();
-    if (mounted) {
-      setState(() {
-        channels = list;
-        isLoading = false;
-        if (channels.isNotEmpty) {
-          _playChannel(channels.first);
-        }
-      });
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
+    try {
+      final list = await ChannelService.fetchChannels();
+      if (mounted) {
+        setState(() {
+          channels = list;
+          isLoading = false;
+          if (channels.isNotEmpty) {
+            _playChannel(channels.first);
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          errorMessage = 'Could not load channels. Check your connection and try again.';
+        });
+      }
     }
   }
 
@@ -73,7 +88,7 @@ class _TvHomeViewState extends State<TvHomeView> {
                 alignment: Alignment.centerLeft,
                 child: Container(
                   width: 320,
-                  color: Colors.black.withOpacity(0.85),
+                  color: Colors.black.withValues(alpha: 0.85),
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,7 +103,31 @@ class _TvHomeViewState extends State<TvHomeView> {
                       ),
                       const SizedBox(height: 16),
                       if (isLoading)
-                        const Center(child: CircularProgressIndicator())
+                        const Expanded(
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (errorMessage != null)
+                        Expanded(
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.redAccent, size: 32),
+                                const SizedBox(height: 12),
+                                Text(
+                                  errorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white70),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: _loadChannels,
+                                  child: const Text('Retry'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
                       else
                         Expanded(
                           child: ListView.builder(
@@ -118,7 +157,8 @@ class _TvHomeViewState extends State<TvHomeView> {
                                                 channel.logo,
                                                 width: 36,
                                                 height: 36,
-                                                errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white),
+                                                errorBuilder: (context, error, stackTrace) =>
+                                                    const Icon(Icons.tv, color: Colors.white),
                                               )
                                             : const Icon(Icons.tv, color: Colors.white),
                                         const SizedBox(width: 12),
